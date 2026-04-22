@@ -1,26 +1,34 @@
 # 全能Matplotlib图形化绘图工具 —— 支持所有图表类型，零代码操作
 # 作者：红鳍东方鲀
-# 版本：1.1.0
+# 版本：1.1.1
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
 import numpy as np
 import json
-from matplotlib.patches import RegularPolygon
+from matplotlib.patches import Circle, RegularPolygon
 from matplotlib.path import Path
 from matplotlib.spines import Spine
+from matplotlib.transforms import Affine2D
 from matplotlib.projections.polar import PolarAxes
 from matplotlib.projections import register_projection
 
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
-# 自定义多边形雷达图投影
 def radar_factory(num_vars, frame='polygon'):
     theta = np.linspace(0, 2*np.pi, num_vars, endpoint=False)
-    
+
+    class RadarTransform(PolarAxes.PolarTransform):
+        def transform_path_non_affine(self, path):
+            if path._interpolation_steps > 1:
+                path = path.interpolated(num_vars)
+            return Path(self.transform(path.vertices), path.codes)
+
     class RadarAxes(PolarAxes):
         name = 'radar'
+        PolarTransform = RadarTransform
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.set_theta_zero_location('N')
@@ -31,39 +39,41 @@ def radar_factory(num_vars, frame='polygon'):
         def plot(self, *args, **kwargs):
             lines = super().plot(*args, **kwargs)
             for line in lines:
-                x, y = line.get_data()
-                if x[0] != x[-1]:
-                    x = np.append(x, x[0])
-                    y = np.append(y, y[0])
-                    line.set_data(x, y)
+                self._close_line(line)
+
+        def _close_line(self, line):
+            x, y = line.get_data()
+            if x[0] != x[-1]:
+                x = np.append(x, x[0])
+                y = np.append(y, y[0])
+                line.set_data(x, y)
 
         def set_varlabels(self, labels):
-            self.set_thetagrids(np.degrees(theta), labels, fontsize=16)
+            self.set_thetagrids(np.degrees(theta), labels)
 
         def _gen_axes_patch(self):
-            if frame == 'polygon':
-                return RegularPolygon((0.5, 0.5), num_vars,
-                                      radius=.5, edgecolor="k")
+            if frame == 'circle':
+                return Circle((0.5, 0.5), 0.5, edgecolor='none')
+            elif frame == 'polygon':
+                return RegularPolygon((0.5, 0.5), num_vars, radius=.5, edgecolor='none')
             else:
-                raise ValueError("unknown value for 'frame': %s" % frame)
+                raise ValueError("Unknown value for 'frame': %s" % frame)
 
         def _gen_axes_spines(self):
-            if frame == 'polygon':
-                verts = unit_poly_verts(theta)
-                verts.append(verts[0])
-                path = Path(verts)
-                spine = Spine(self, 'circle', path)
-                spine.set_transform(self.transAxes)
-                return {'circle': spine}
+            if frame == 'circle':
+                spines = super()._gen_axes_spines()
+                for spine in spines.values():
+                    spine.set_edgecolor('#d0d0d0')  # 灰色
+                return spines
+            elif frame == 'polygon':
+                spine = Spine(axes=self, spine_type='circle', path=Path.unit_regular_polygon(num_vars))
+                spine.set_transform(Affine2D().scale(.5).translate(.5, .5) + self.transAxes)
+                spine.set_edgecolor('#d0d0d0')  # 灰色
+                return {'polar': spine}
             else:
-                raise ValueError("unknown value for 'frame': %s" % frame)
+             raise ValueError("Unknown value for 'frame': %s" % frame)
 
-    def unit_poly_verts(theta):
-        x = 0.5 * np.cos(theta) + 0.5
-        y = 0.5 * np.sin(theta) + 0.5
-        return [(x[i], y[i]) for i in range(len(x))]
-
-    register_projection(RadarAxes)
+    register_projection(RadarAxes)  # pyright: ignore[reportUnreachable]
     return theta
 class DrawTool:
     def __init__(self, root):
@@ -522,26 +532,25 @@ class DrawTool:
             return
         
         num_vars = len(x_data)
-        angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
-        angles += angles[:1]  # 闭合
+        theta = radar_factory(num_vars, frame='polygon')
         
-        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='radar'))
+        fig.subplots_adjust(top=0.85)
         
         # 设置径向轴范围
         max_value = max(max(dataset['y_data']) for dataset in datasets) if datasets else 1
-        ax.set_ylim(0, max_value * 1.2)
+        ax.set_ylim(0, max(max_value * 1.2, 6))
+        ax.set_rgrids([1, 2, 3, 4, 5, 6])
         
         # 绘制每一组数据
         markers = ['s', 'o', '^', 'v', 'D']
         for i, dataset in enumerate(datasets):
-            y_data = dataset['y_data'] + dataset['y_data'][:1]  # 闭合
-            ax.plot(angles, y_data, color=dataset['color'], marker=markers[i%len(markers)],
+            ax.plot(theta, dataset['y_data'], color=dataset['color'], marker=markers[i%len(markers)],
                     markersize=10, linewidth=2, label=dataset['label'])
-            ax.fill(angles, y_data, color=dataset['color'], alpha=0.25)
+            ax.fill(theta, dataset['y_data'], color=dataset['color'], alpha=0.25)
         
         # 设置轴标签
-        ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(x_data)
+        ax.set_varlabels(x_data)
         
         # 添加图例
         ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0), fontsize=12)

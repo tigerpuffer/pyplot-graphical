@@ -1,13 +1,11 @@
 # 全能Matplotlib图形化绘图工具 —— 支持所有图表类型，零代码操作
 # 作者：红鳍东方鲀
 # 版本：1.1.1
-
-import json
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
-
 import matplotlib.pyplot as plt
 import numpy as np
+import json
 from matplotlib.patches import Circle, RegularPolygon
 from matplotlib.path import Path
 from matplotlib.spines import Spine
@@ -15,16 +13,8 @@ from matplotlib.transforms import Affine2D
 from matplotlib.projections.polar import PolarAxes
 from matplotlib.projections import register_projection
 
-# 设置中文字体和负号显示
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
-
-# 定义颜色列表
-COLORS = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'cyan', 'yellow', 'black']
-DEFAULT_COLORS = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink']
-
-# 定义图表类型
-CHART_TYPES = ["折线图", "柱状图", "散点图", "误差棒图", "直方图", "饼图", "雷达图"]
 
 def radar_factory(num_vars, frame='polygon'):
     theta = np.linspace(0, 2*np.pi, num_vars, endpoint=False)
@@ -98,18 +88,6 @@ class DrawTool:
         # 初始化GUI组件
         self._init_gui()
     
-    def _init_chart_mapping(self):
-        """初始化图表类型到绘制函数的映射"""
-        self.chart_type_to_func = {
-            "折线图": self._plot_line,
-            "柱状图": self._plot_bar,
-            "散点图": self._plot_scatter,
-            "误差棒图": self._plot_errorbar,
-            "直方图": self._plot_hist,
-            "饼图": self._plot_pie,
-            "雷达图": self._plot_radar
-        }
-    
     def _create_dataset_inputs(self):
         """创建数据集输入字段"""
         # 清除现有数据集输入
@@ -147,10 +125,12 @@ class DrawTool:
             
             # 颜色控制
             tk.Label(frame, text=f"颜色：", font=('微软雅黑', 10)).grid(row=0, column=6, padx=5, pady=4, sticky="w")
-            combo_color = ttk.Combobox(frame, values=COLORS, width=8, state='readonly')
+            color_options = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'cyan', 'yellow', 'black']
+            combo_color = ttk.Combobox(frame, values=color_options, width=8, state='readonly')
             combo_color.grid(row=0, column=7, padx=5, pady=4)
             # 默认颜色
-            combo_color.current(DEFAULT_COLORS.index(DEFAULT_COLORS[i % len(DEFAULT_COLORS)]))
+            default_colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink']
+            combo_color.current(default_colors.index(default_colors[i % len(default_colors)]))
             
             self.dataset_frames.append({
                 "frame": frame,
@@ -194,7 +174,8 @@ class DrawTool:
         
         # 图表类型
         tk.Label(frame_setting, text="图表类型：", font=("微软雅黑", 11)).grid(row=0, column=0, padx=5, pady=8, sticky="w")
-        self.combo_chart = ttk.Combobox(frame_setting, values=CHART_TYPES, width=18, state="readonly")
+        self.chart_types = ["折线图", "柱状图", "散点图", "误差棒图", "直方图", "饼图", "雷达图"]
+        self.combo_chart = ttk.Combobox(frame_setting, values=self.chart_types, width=18, state="readonly")
         self.combo_chart.current(0)
         self.combo_chart.grid(row=0, column=1, padx=5, pady=8)
         # 添加图表类型切换事件
@@ -227,6 +208,11 @@ class DrawTool:
         chk_show_values = ttk.Checkbutton(frame_setting, text="显示数值", variable=self.var_show_values)
         chk_show_values.grid(row=3, column=0, padx=5, pady=8, sticky="w")
         
+        # 雷达图阴影选项
+        self.var_radar_shadow = tk.BooleanVar(value=True)  # 默认开启阴影
+        chk_radar_shadow = ttk.Checkbutton(frame_setting, text="雷达图阴影", variable=self.var_radar_shadow)
+        chk_radar_shadow.grid(row=3, column=1, padx=5, pady=8, sticky="w")
+        
         # ========== 第三部分：操作按钮区 ==========
         frame_btn = tk.Frame(self.root)
         frame_btn.pack(pady=20)
@@ -255,9 +241,20 @@ class DrawTool:
         
         # 作者信息
         tk.Label(self.root, text="作者：红鳍东方鲀", font=('微软雅黑', 9), fg="gray").pack(pady=5)
-        tk.Label(self.root, text="版本：v1.1.1", font=('微软雅黑', 9), fg="gray").pack(pady=5)
+        tk.Label(self.root, text="版本：v1.0.3", font=('微软雅黑', 9), fg="gray").pack(pady=5)
     
-
+    # 初始化图表类型映射
+    def _init_chart_mapping(self):
+        """初始化图表类型到绘制函数的映射"""
+        self.chart_mapping = {
+            "折线图": self._plot_line,
+            "柱状图": self._plot_bar,
+            "散点图": self._plot_scatter,
+            "误差棒图": self._plot_errorbar,
+            "直方图": self._plot_hist,
+            "饼图": self._plot_pie,
+            "雷达图": self._plot_radar
+        }
     
     # 核心绘图函数（灵活调用Matplotlib）
     def plot_data(self):
@@ -320,8 +317,12 @@ class DrawTool:
             plt.figure(figsize=(10, 6))
 
             # 6. 根据选择的图表类型绘图（使用字典映射）
-            if chart_type in self.chart_type_to_func:
-                self.chart_type_to_func[chart_type](x_data, datasets, show_values)
+            if chart_type in self.chart_mapping:
+                if chart_type == "雷达图":
+                    show_radar_shadow = 0.25 if self.var_radar_shadow.get() else 0
+                    self.chart_mapping[chart_type](x_data, datasets, show_values, show_radar_shadow)
+                else:
+                    self.chart_mapping[chart_type](x_data, datasets, show_values)
             else:
                 raise ValueError("不支持的图表类型")
 
@@ -534,7 +535,7 @@ class DrawTool:
                 autotexts[list(wedges).index(wedge)].set_text(f'{val:.2f}')
     
     # 雷达图绘制（支持多个数据集）
-    def _plot_radar(self, x_data, datasets, show_values=False):
+    def _plot_radar(self, x_data, datasets, show_values=False, show_radar_shadow=0.25):
         if len(x_data) < 3:
             messagebox.showwarning("提示", "雷达图需要至少3个数据点！")
             return
@@ -547,15 +548,20 @@ class DrawTool:
         
         # 设置径向轴范围
         max_value = max(max(dataset['y_data']) for dataset in datasets) if datasets else 1
-        ax.set_ylim(0, max(max_value * 1.2, 6))
-        ax.set_rgrids([1, 2, 3, 4, 5, 6])
+        # 计算合适的最大值，向上取整到最近的整数
+        max_limit = int(max_value * 1.2) + 1
+        # 生成合适的网格线
+        grid_steps = min(6, max_limit)
+        grid_values = list(range(0, max_limit + 1, max_limit // grid_steps if grid_steps > 0 else 1))
+        ax.set_ylim(0, max_limit)
+        ax.set_rgrids(grid_values)
         
         # 绘制每一组数据
         markers = ['s', 'o', '^', 'v', 'D']
         for i, dataset in enumerate(datasets):
             ax.plot(theta, dataset['y_data'], color=dataset['color'], marker=markers[i%len(markers)],
                     markersize=10, linewidth=2, label=dataset['label'])
-            ax.fill(theta, dataset['y_data'], color=dataset['color'], alpha=0.25)
+            ax.fill(theta, dataset['y_data'], color=dataset['color'], alpha=show_radar_shadow)
         
         # 设置轴标签
         ax.set_varlabels(x_data)
@@ -715,7 +721,7 @@ class DrawTool:
             # 创建分辨率选择对话框
             dpi_dialog = tk.Toplevel(self.root)
             dpi_dialog.title("设置图片分辨率")
-            dpi_dialog.geometry("400x320")
+            dpi_dialog.geometry("430x340")
             dpi_dialog.resizable(False, False)
 
             # 居中显示对话框

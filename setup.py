@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 setup(
     name='pyplot-draw-tool',
-    version='1.1.0',
+    version='1.2.0',
     author='红鳍东方鲀',
     author_email='',
     description='A GUI tool for creating various types of charts with Matplotlib',

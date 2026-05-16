@@ -1,6 +1,6 @@
 # 全能Matplotlib图形化绘图工具 —— 支持所有图表类型，零代码操作
 # 作者：红鳍东方鲀
-# 版本：2.0.0
+# 版本：2.2.0
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
@@ -146,12 +146,18 @@ class DrawTool:
             default_colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink']
             combo_color.current(default_colors.index(default_colors[i % len(default_colors)]))
             
+            # 自定义标签（用于柱状图、误差棒图、直方图）
+            tk.Label(frame, text=f"自定义标签：", font=('微软雅黑', 10)).grid(row=0, column=8, padx=5, pady=4, sticky="w")
+            entry_custom_labels = tk.Text(frame, width=20, height=2)
+            entry_custom_labels.grid(row=0, column=9, padx=5, pady=4)
+            
             self.dataset_frames.append({
                 "frame": frame,
                 "label": entry_label,
                 "y_data": entry_y,
                 "err_data": entry_err,
-                "color": combo_color
+                "color": combo_color,
+                "custom_labels": entry_custom_labels
             })
     
     def _on_dataset_count_change(self, event):
@@ -227,6 +233,11 @@ class DrawTool:
         chk_radar_shadow = ttk.Checkbutton(frame_setting, text="雷达图阴影", variable=self.var_radar_shadow)
         chk_radar_shadow.grid(row=3, column=1, padx=5, pady=8, sticky="w")
         
+        # 显示自定义标签选项
+        self.var_show_custom_labels = tk.BooleanVar()
+        chk_show_custom_labels = ttk.Checkbutton(frame_setting, text="显示自定义标签", variable=self.var_show_custom_labels)
+        chk_show_custom_labels.grid(row=3, column=2, padx=5, pady=8, sticky="w")
+        
         # ========== 第三部分：操作按钮区 ==========
         frame_btn = tk.Frame(self.frame_basic)
         frame_btn.pack(pady=20)
@@ -255,7 +266,7 @@ class DrawTool:
         
         # 作者信息
         tk.Label(self.frame_basic, text="作者：红鳍东方鲀", font=('微软雅黑', 9), fg="gray").pack(pady=5)
-        tk.Label(self.frame_basic, text="版本：v2.0.0", font=('微软雅黑', 9), fg="gray").pack(pady=5)
+        tk.Label(self.frame_basic, text="版本：v2.2.0", font=('微软雅黑', 9), fg="gray").pack(pady=5)
     
     def _init_custom_code_gui(self):
         """初始化自定义代码页面"""
@@ -521,18 +532,21 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                 y_str = frame['y_data'].get(1.0, tk.END)
                 err_str = frame['err_data'].get(1.0, tk.END)
                 color = frame['color'].get().strip() or 'blue'  # 获取颜色设置
+                custom_labels_str = frame['custom_labels'].get(1.0, tk.END)
                 
                 if not y_str or y_str.strip() == '':
                     raise ValueError(f"请输入数据集 {i+1} 的Y轴数据")
                 
                 y_data = self._parse_data(y_str, float)
                 error = self._parse_data(err_str, float) if err_str and err_str.strip() != '' else None
+                custom_labels = [l.strip() for l in custom_labels_str.split(',')] if custom_labels_str and custom_labels_str.strip() != '' else []
                 
                 datasets.append({
                     'label': label,
                     'y_data': y_data,
                     'error': error,
-                    'color': color
+                    'color': color,
+                    'custom_labels': custom_labels
                 })
 
             # 3. 处理X轴数据
@@ -562,6 +576,12 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
             show_grid = self.var_grid.get()
             show_legend = self.var_legend.get()
             show_values = self.var_show_values.get()
+            show_custom_labels = self.var_show_custom_labels.get()
+            
+            # 检查自定义标签功能是否支持当前图表类型
+            if show_custom_labels and chart_type not in ["柱状图", "误差棒图", "直方图"]:
+                messagebox.showwarning("提示", "自定义标签功能仅支持柱状图、误差棒图和直方图")
+                show_custom_labels = False
 
             # 5. 创建画布
             plt.figure(figsize=(10, 6))
@@ -571,6 +591,8 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                 if chart_type == "雷达图":
                     show_radar_shadow = 0.25 if self.var_radar_shadow.get() else 0
                     self.chart_mapping[chart_type](x_data, datasets, show_values, show_radar_shadow)
+                elif chart_type in ["柱状图", "误差棒图", "直方图"]:
+                    self.chart_mapping[chart_type](x_data, datasets, show_values, show_custom_labels)
                 else:
                     self.chart_mapping[chart_type](x_data, datasets, show_values)
             else:
@@ -613,7 +635,7 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                     plt.text(x, y + offset + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
     
     # 柱状图绘制（支持分组柱状图和误差棒）
-    def _plot_bar(self, x_data, datasets, show_values=False):
+    def _plot_bar(self, x_data, datasets, show_values=False, show_custom_labels=False):
         import numpy as np
         n = len(x_data)
         
@@ -635,6 +657,20 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                     val = dataset['y_data'][0]
                     plt.text(x_pos[i], val + (dataset['error'][0] if dataset['error'] else 0) + 0.02,
                             f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                
+                # 显示自定义标签
+                if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                    labels = dataset['custom_labels']
+                    if labels:
+                        label = labels[0] if isinstance(labels, list) else labels
+                        val = dataset['y_data'][0]
+                        plt.text(x_pos[i], val + (dataset['error'][0] if dataset['error'] else 0) + 0.05,
+                                str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
+            
+            # 调整y轴范围，确保自定义标签完整显示
+            if show_custom_labels:
+                y_min, y_max = plt.ylim()
+                plt.ylim(y_min, y_max * 1.15)
         else:
             # 检查是否所有数据集的Y轴数据长度相同
             if all(len(dataset['y_data']) == len(datasets[0]['y_data']) for dataset in datasets):
@@ -658,8 +694,22 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                             for bar, val in zip(bars, dataset['y_data']):
                                 plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][dataset['y_data'].index(val)] if dataset['error'] and dataset['y_data'].index(val) < len(dataset['error']) else 0) + 0.02,
                                         f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                        
+                        # 显示自定义标签
+                        if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                            labels = dataset['custom_labels']
+                            for bar, val, idx in zip(bars, dataset['y_data'], range(len(dataset['y_data']))):
+                                if idx < len(labels):
+                                    label = labels[idx]
+                                    plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][idx] if dataset['error'] and idx < len(dataset['error']) else 0) + 0.05,
+                                            str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
                     
                     plt.xticks(x_pos, x_data)
+                    
+                    # 调整y轴范围，确保自定义标签完整显示
+                    if show_custom_labels:
+                        y_min, y_max = plt.ylim()
+                        plt.ylim(y_min, y_max * 1.15)
                 else:
                     # 新模式：每个X轴标签对应一组数据集
                     num_datasets = len(datasets)
@@ -682,9 +732,23 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                                 for bar, val in zip(bars, dataset['y_data']):
                                     plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][dataset['y_data'].index(val)] if dataset['error'] and dataset['y_data'].index(val) < len(dataset['error']) else 0) + 0.02,
                                             f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                            
+                            # 显示自定义标签
+                            if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                                labels = dataset['custom_labels']
+                                for bar, val, idx in zip(bars, dataset['y_data'], range(len(dataset['y_data']))):
+                                    if idx < len(labels):
+                                        label = labels[idx]
+                                        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][idx] if dataset['error'] and idx < len(dataset['error']) else 0) + 0.05,
+                                                str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
                     
                     # 设置X轴标签
                     plt.xticks(np.arange(len(x_data)) * (num_datasets * width + 0.2) + (num_datasets * width) / 2, x_data)
+                    
+                    # 调整y轴范围，确保自定义标签完整显示
+                    if show_custom_labels:
+                        y_min, y_max = plt.ylim()
+                        plt.ylim(y_min, y_max * 1.15)
             else:
                 # 传统分组柱状图
                 width = 0.8 / len(datasets)
@@ -704,8 +768,22 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                         for bar, val in zip(bars, dataset['y_data']):
                             plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][dataset['y_data'].index(val)] if dataset['error'] and dataset['y_data'].index(val) < len(dataset['error']) else 0) + 0.02,
                                     f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                    
+                    # 显示自定义标签
+                    if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                        labels = dataset['custom_labels']
+                        for bar, val, idx in zip(bars, dataset['y_data'], range(len(dataset['y_data']))):
+                            if idx < len(labels):
+                                label = labels[idx]
+                                plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][idx] if dataset['error'] and idx < len(dataset['error']) else 0) + 0.05,
+                                        str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
                 
                 plt.xticks(x_pos, x_data)
+                
+                # 调整y轴范围，确保自定义标签完整显示
+                if show_custom_labels:
+                    y_min, y_max = plt.ylim()
+                    plt.ylim(y_min, y_max * 1.15)
     
     # 散点图绘制（支持多个数据集）
     def _plot_scatter(self, x_data, datasets, show_values=False):
@@ -720,7 +798,7 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                     plt.text(x, y + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
     
     # 误差棒图绘制（支持多个数据集）
-    def _plot_errorbar(self, x_data, datasets, show_values=False):
+    def _plot_errorbar(self, x_data, datasets, show_values=False, show_custom_labels=False):
         markers = ['o', 's', '^', 'v', 'D']
         
         # 检查是否是使用数据集标签作为X轴的情况
@@ -739,8 +817,21 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                 if show_values:
                     y = dataset['y_data'][0]
                     plt.text(x_pos[i], y + dataset['error'][0] + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
+                
+                # 显示自定义标签
+                if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                    labels = dataset['custom_labels']
+                    if labels:
+                        label = labels[0] if isinstance(labels, list) else labels
+                        y = dataset['y_data'][0]
+                        plt.text(x_pos[i], y + dataset['error'][0] + 0.08, str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
             
             plt.xticks(x_pos, x_data)
+            
+            # 调整y轴范围，确保自定义标签完整显示
+            if show_custom_labels:
+                y_min, y_max = plt.ylim()
+                plt.ylim(y_min, y_max * 1.15)
         else:
             # 传统误差棒图
             for i, dataset in enumerate(datasets):
@@ -754,9 +845,22 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                 if show_values:
                     for j, (x, y) in enumerate(zip(x_data, dataset['y_data'])):
                         plt.text(x, y + dataset['error'][j] + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
+                
+                # 显示自定义标签
+                if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                    labels = dataset['custom_labels']
+                    for j, (x, y) in enumerate(zip(x_data, dataset['y_data'])):
+                        if j < len(labels):
+                            label = labels[j]
+                            plt.text(x, y + dataset['error'][j] + 0.08, str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
+            
+            # 调整y轴范围，确保自定义标签完整显示
+            if show_custom_labels:
+                y_min, y_max = plt.ylim()
+                plt.ylim(y_min, y_max * 1.15)
     
     # 直方图绘制
-    def _plot_hist(self, x_data, datasets, show_values=False):
+    def _plot_hist(self, x_data, datasets, show_values=False, show_custom_labels=False):
         for i, dataset in enumerate(datasets):
             counts, bins, patches = plt.hist(dataset['y_data'], bins=8, alpha=0.6, color=dataset['color'], 
                     label=dataset['label'])
@@ -767,6 +871,20 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                     if count > 0:
                         plt.text(patch.get_x() + patch.get_width()/2, patch.get_height() + 0.1, 
                                 f'{int(count)}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
+            
+            # 显示自定义标签
+            if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                labels = dataset['custom_labels']
+                for idx, (count, patch) in enumerate(zip(counts, patches)):
+                    if count > 0 and idx < len(labels):
+                        label = labels[idx]
+                        plt.text(patch.get_x() + patch.get_width()/2, patch.get_height() + 0.15, 
+                                str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        # 调整y轴范围，确保自定义标签完整显示
+        if show_custom_labels:
+            y_min, y_max = plt.ylim()
+            plt.ylim(y_min, y_max * 1.15)
     
     # 饼图绘制
     def _plot_pie(self, x_data, datasets, show_values=False):
@@ -1065,7 +1183,8 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                     "label": frame['label'].get(),
                     "y_data": frame['y_data'].get(1.0, tk.END).strip(),
                     "err_data": frame['err_data'].get(1.0, tk.END).strip(),
-                    "color": frame['color'].get()
+                    "color": frame['color'].get(),
+                    "custom_labels": frame['custom_labels'].get(1.0, tk.END).strip()
                 }
                 config["datasets"].append(dataset_config)
 
@@ -1150,12 +1269,17 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
                         frame['y_data'].insert(1.0, dataset_config['y_data'])
                         frame['err_data'].delete(1.0, tk.END)
                         frame['err_data'].insert(1.0, dataset_config['err_data'])
-
+                        
                         # 恢复颜色
                         color = dataset_config['color']
                         color_options = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'cyan', 'yellow', 'black']
                         if color in color_options:
                             frame['color'].current(color_options.index(color))
+                        
+                        # 恢复自定义标签
+                        if 'custom_labels' in dataset_config:
+                            frame['custom_labels'].delete(1.0, tk.END)
+                            frame['custom_labels'].insert(1.0, dataset_config['custom_labels'])
 
             messagebox.showinfo("成功", f"配置已成功导入！\n现在可以点击\"一键绘制图表\"按钮来绘制图表")
 

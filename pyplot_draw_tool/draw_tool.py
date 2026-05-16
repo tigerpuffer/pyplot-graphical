@@ -1,6 +1,6 @@
 # 全能Matplotlib图形化绘图工具 —— 支持所有图表类型，零代码操作
 # 作者：红鳍东方鲀
-# 版本：1.1.1
+# 版本：2.2.0
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import matplotlib.pyplot as plt
@@ -79,14 +79,29 @@ class DrawTool:
     def __init__(self, root):
         self.root = root
         self.root.title("Python绘图工具")
-        self.root.geometry("650x650")
+        self.root.geometry("800x750")
         self.root.resizable(True, True)
         
         # 初始化图表类型映射
         self._init_chart_mapping()
         
-        # 初始化GUI组件
-        self._init_gui()
+        # 创建Notebook控件（多页面支持）
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # 创建基础绘图页面
+        self.frame_basic = ttk.Frame(self.notebook)
+        self.notebook.add(self.frame_basic, text="基础绘图")
+        
+        # 创建自定义代码页面
+        self.frame_custom = ttk.Frame(self.notebook)
+        self.notebook.add(self.frame_custom, text="自定义代码")
+        
+        # 初始化基础绘图页面
+        self._init_basic_gui()
+        
+        # 初始化自定义代码页面
+        self._init_custom_code_gui()
     
     def _create_dataset_inputs(self):
         """创建数据集输入字段"""
@@ -102,9 +117,8 @@ class DrawTool:
         count = int(self.dataset_count.get())
         
         # 创建新的数据集输入
-        frame_data = self.root.nametowidget(".!labelframe")
         for i in range(count):
-            frame = tk.Frame(frame_data)
+            frame = tk.Frame(self.frame_data)
             frame.grid(row=i+2, column=0, columnspan=2, sticky="we", padx=5, pady=5)
             
             # 数据集标签
@@ -132,36 +146,42 @@ class DrawTool:
             default_colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink']
             combo_color.current(default_colors.index(default_colors[i % len(default_colors)]))
             
+            # 自定义标签（用于柱状图、误差棒图、直方图）
+            tk.Label(frame, text=f"自定义标签：", font=('微软雅黑', 10)).grid(row=0, column=8, padx=5, pady=4, sticky="w")
+            entry_custom_labels = tk.Text(frame, width=20, height=2)
+            entry_custom_labels.grid(row=0, column=9, padx=5, pady=4)
+            
             self.dataset_frames.append({
                 "frame": frame,
                 "label": entry_label,
                 "y_data": entry_y,
                 "err_data": entry_err,
-                "color": combo_color
+                "color": combo_color,
+                "custom_labels": entry_custom_labels
             })
     
     def _on_dataset_count_change(self, event):
         """处理数据集数量变化事件"""
         self._create_dataset_inputs()
     
-    def _init_gui(self):
+    def _init_basic_gui(self):
         # 标题
-        tk.Label(self.root, text="python绘图工具", font=("微软雅黑", 18, "bold")).pack(pady=15)
+        tk.Label(self.frame_basic, text="python绘图工具", font=("微软雅黑", 18, "bold")).pack(pady=15)
         
         # ========== 第一部分：数据输入区 ==========
-        frame_data = tk.LabelFrame(self.root, text="数据输入（逗号分隔数字）", font=("微软雅黑", 12))
-        frame_data.pack(fill="x", padx=20, pady=5)
+        self.frame_data = tk.LabelFrame(self.frame_basic, text="数据输入（逗号分隔数字）", font=("微软雅黑", 12))
+        self.frame_data.pack(fill="x", padx=20, pady=5)
         
         # 数据集数量选择
-        tk.Label(frame_data, text="数据集数量：", font=('微软雅黑', 11)).grid(row=0, column=0, padx=5, pady=8, sticky="w")
-        self.dataset_count = ttk.Combobox(frame_data, values=[1, 2, 3, 4, 5, 6, 7], width=5, state="readonly")
+        tk.Label(self.frame_data, text="数据集数量：", font=('微软雅黑', 11)).grid(row=0, column=0, padx=5, pady=8, sticky="w")
+        self.dataset_count = ttk.Combobox(self.frame_data, values=[1, 2, 3, 4, 5, 6, 7], width=5, state="readonly")
         self.dataset_count.current(0)
         self.dataset_count.grid(row=0, column=1, padx=5, pady=8, sticky="w")
         self.dataset_count.bind("<<ComboboxSelected>>", self._on_dataset_count_change)
         
         # X轴数据
-        tk.Label(frame_data, text="X轴数据（类别）：", font=('微软雅黑', 11)).grid(row=1, column=0, padx=5, pady=8, sticky="w")
-        self.entry_x = tk.Text(frame_data, width=60, height=2)
+        tk.Label(self.frame_data, text="X轴数据（类别）：", font=('微软雅黑', 11)).grid(row=1, column=0, padx=5, pady=8, sticky="w")
+        self.entry_x = tk.Text(self.frame_data, width=60, height=2)
         self.entry_x.grid(row=1, column=1, padx=5, pady=8)
         
         # 数据集输入区域
@@ -169,7 +189,7 @@ class DrawTool:
         self._create_dataset_inputs()
         
         # ========== 第二部分：图表设置区 ==========
-        frame_setting = tk.LabelFrame(self.root, text="图表设置", font=("微软雅黑", 12))
+        frame_setting = tk.LabelFrame(self.frame_basic, text="图表设置", font=("微软雅黑", 12))
         frame_setting.pack(fill="x", padx=20, pady=5)
         
         # 图表类型
@@ -213,8 +233,13 @@ class DrawTool:
         chk_radar_shadow = ttk.Checkbutton(frame_setting, text="雷达图阴影", variable=self.var_radar_shadow)
         chk_radar_shadow.grid(row=3, column=1, padx=5, pady=8, sticky="w")
         
+        # 显示自定义标签选项（柱状图、误差棒图、直方图）
+        self.var_show_custom_labels = tk.BooleanVar()
+        chk_custom_labels = ttk.Checkbutton(frame_setting, text="显示自定义标签", variable=self.var_show_custom_labels)
+        chk_custom_labels.grid(row=4, column=0, padx=5, pady=8, sticky="w")
+        
         # ========== 第三部分：操作按钮区 ==========
-        frame_btn = tk.Frame(self.root)
+        frame_btn = tk.Frame(self.frame_basic)
         frame_btn.pack(pady=20)
 
         btn_example = ttk.Button(frame_btn, text="📌 填充示例数据", width=18, command=self.fill_example)
@@ -230,7 +255,7 @@ class DrawTool:
         btn_clear.grid(row=0, column=3, padx=15)
 
         # 配置管理按钮
-        frame_config = tk.Frame(self.root)
+        frame_config = tk.Frame(self.frame_basic)
         frame_config.pack(pady=10)
 
         btn_export = ttk.Button(frame_config, text="📤 导出配置", width=18, command=self.export_config)
@@ -240,8 +265,264 @@ class DrawTool:
         btn_import.grid(row=0, column=1, padx=15)
         
         # 作者信息
-        tk.Label(self.root, text="作者：红鳍东方鲀", font=('微软雅黑', 9), fg="gray").pack(pady=5)
-        tk.Label(self.root, text="版本：v1.0.3", font=('微软雅黑', 9), fg="gray").pack(pady=5)
+        tk.Label(self.frame_basic, text="作者：红鳍东方鲀", font=('微软雅黑', 9), fg="gray").pack(pady=5)
+        tk.Label(self.frame_basic, text="版本：v2.2.0", font=('微软雅黑', 9), fg="gray").pack(pady=5)
+    
+    def _init_custom_code_gui(self):
+        """初始化自定义代码页面"""
+        # 标题
+        tk.Label(self.frame_custom, text="自定义Matplotlib代码", font=("微软雅黑", 18, "bold")).pack(pady=15)
+        
+        # 说明
+        tk.Label(self.frame_custom, text="在此处输入您的Matplotlib自定义代码，使用plt作为绘图对象", 
+                 font=('微软雅黑', 10), fg="gray").pack(pady=5)
+        
+        # 代码输入区域
+        frame_code = tk.LabelFrame(self.frame_custom, text="自定义代码", font=("微软雅黑", 12))
+        frame_code.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # 代码输入框
+        self.custom_code_text = tk.Text(frame_code, width=80, height=25, font=('Consolas', 10))
+        self.custom_code_text.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # 示例代码
+        sample_code = '''# 在此输入您的自定义Matplotlib代码
+# 示例代码：
+
+import numpy as np
+
+# 生成数据
+x = np.linspace(0, 2 * np.pi, 100)
+y1 = np.sin(x)
+y2 = np.cos(x)
+
+# 绘制图形
+plt.figure(figsize=(10, 6))
+plt.plot(x, y1, label='sin(x)', color='blue')
+plt.plot(x, y2, label='cos(x)', color='red')
+
+# 设置标题和标签
+plt.title('Custom Plot Example')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.legend()
+plt.grid(True)
+'''
+        self.custom_code_text.insert(1.0, sample_code)
+        
+        # 按钮区域
+        frame_buttons = tk.Frame(self.frame_custom)
+        frame_buttons.pack(pady=15)
+        
+        # 执行按钮
+        btn_execute = ttk.Button(frame_buttons, text="▶ 执行代码", width=18, command=self.execute_custom_code)
+        btn_execute.grid(row=0, column=0, padx=15)
+        
+        # 清空按钮
+        btn_clear = ttk.Button(frame_buttons, text="🧹 清空代码", width=18, command=self.clear_custom_code)
+        btn_clear.grid(row=0, column=1, padx=15)
+        
+        # 保存按钮
+        btn_save = ttk.Button(frame_buttons, text="💾 保存图片", width=18, command=self.save_figure)
+        btn_save.grid(row=0, column=2, padx=15)
+        
+        # 加载按钮
+        btn_load = ttk.Button(frame_buttons, text="📂 加载代码", width=18, command=self.load_custom_code)
+        btn_load.grid(row=0, column=3, padx=15)
+
+        # 导出代码按钮
+        btn_export = ttk.Button(frame_buttons, text="📤 导出代码", width=18, command=self.save_custom_code)
+        btn_export.grid(row=0, column=4, padx=15)
+        
+        # 预置模板按钮
+        frame_templates = tk.LabelFrame(self.frame_custom, text="预置模板", font=("微软雅黑", 10))
+        frame_templates.pack(fill="x", padx=20, pady=5)
+        
+        templates = [
+            ("折线图模板", self.load_line_template),
+            ("柱状图模板", self.load_bar_template),
+            ("散点图模板", self.load_scatter_template),
+            ("饼图模板", self.load_pie_template),
+            ("3D图模板", self.load_3d_template),
+        ]
+        
+        for i, (text, cmd) in enumerate(templates):
+            btn = ttk.Button(frame_templates, text=text, width=15, command=cmd)
+            btn.grid(row=0, column=i, padx=5, pady=5)
+    
+    def execute_custom_code(self):
+        """执行用户输入的自定义代码"""
+        try:
+            code = self.custom_code_text.get(1.0, tk.END)
+            if not code.strip():
+                messagebox.showwarning("警告", "请输入自定义代码！")
+                return
+            
+            # 创建新的图形
+            plt.figure(figsize=(10, 6))
+            
+            # 执行用户代码
+            exec(code)
+            
+            # 显示图形
+            plt.tight_layout()
+            plt.show()
+            
+        except SyntaxError as e:
+            messagebox.showerror("语法错误", f"代码语法错误：\n{str(e)}")
+        except Exception as e:
+            messagebox.showerror("执行错误", f"代码执行错误：\n{str(e)}")
+    
+    def clear_custom_code(self):
+        """清空自定义代码"""
+        self.custom_code_text.delete(1.0, tk.END)
+    
+    def load_custom_code(self):
+        """加载自定义代码文件"""
+        file_path = filedialog.askopenfilename(
+            title="选择代码文件",
+            filetypes=[("Python文件", "*.py"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    code = f.read()
+                self.custom_code_text.delete(1.0, tk.END)
+                self.custom_code_text.insert(1.0, code)
+                messagebox.showinfo("成功", "代码加载成功！")
+            except Exception as e:
+                messagebox.showerror("错误", f"加载文件失败：\n{str(e)}")
+    
+    def save_custom_code(self):
+        """保存自定义代码文件"""
+        file_path = filedialog.asksaveasfilename(
+            title="保存代码文件",
+            defaultextension=".py",
+            filetypes=[("Python文件", "*.py"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            try:
+                code = self.custom_code_text.get(1.0, tk.END)
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(code)
+                messagebox.showinfo("成功", "代码保存成功！")
+            except Exception as e:
+                messagebox.showerror("错误", f"保存文件失败：\n{str(e)}")
+    
+    def load_line_template(self):
+        """加载折线图模板"""
+        template = '''import numpy as np
+
+# 生成数据
+x = np.linspace(0, 10, 100)
+y = np.sin(x)
+
+# 绘制折线图
+plt.figure(figsize=(10, 6))
+plt.plot(x, y, color='blue', linewidth=2, label='sin(x)')
+
+# 设置标题和标签
+plt.title('Line Plot', fontsize=16)
+plt.xlabel('X轴', fontsize=12)
+plt.ylabel('Y轴', fontsize=12)
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.7)
+'''
+        self.custom_code_text.delete(1.0, tk.END)
+        self.custom_code_text.insert(1.0, template)
+    
+    def load_bar_template(self):
+        """加载柱状图模板"""
+        template = '''import numpy as np
+
+# 数据
+categories = ['A', 'B', 'C', 'D', 'E']
+values = [23, 45, 56, 78, 32]
+
+# 绘制柱状图
+plt.figure(figsize=(10, 6))
+plt.bar(categories, values, color='skyblue', edgecolor='black')
+
+# 设置标题和标签
+plt.title('Bar Plot', fontsize=16)
+plt.xlabel('类别', fontsize=12)
+plt.ylabel('数值', fontsize=12)
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+'''
+        self.custom_code_text.delete(1.0, tk.END)
+        self.custom_code_text.insert(1.0, template)
+    
+    def load_scatter_template(self):
+        """加载散点图模板"""
+        template = '''import numpy as np
+
+# 生成随机数据
+np.random.seed(42)
+x = np.random.randn(100)
+y = np.random.randn(100)
+colors = np.random.rand(100)
+sizes = 100 * np.random.rand(100)
+
+# 绘制散点图
+plt.figure(figsize=(10, 6))
+plt.scatter(x, y, c=colors, s=sizes, alpha=0.6, cmap='viridis')
+
+# 设置标题和标签
+plt.title('Scatter Plot', fontsize=16)
+plt.xlabel('X轴', fontsize=12)
+plt.ylabel('Y轴', fontsize=12)
+plt.colorbar(label='颜色')
+plt.grid(True, linestyle='--', alpha=0.7)
+'''
+        self.custom_code_text.delete(1.0, tk.END)
+        self.custom_code_text.insert(1.0, template)
+    
+    def load_pie_template(self):
+        """加载饼图模板"""
+        template = '''import numpy as np
+
+# 数据
+labels = ['A', 'B', 'C', 'D']
+sizes = [25, 35, 20, 20]
+colors = ['#ff9999', '#66b3ff', '#99ff99', '#ffcc99']
+explode = (0.05, 0, 0, 0)
+
+# 绘制饼图
+plt.figure(figsize=(10, 6))
+plt.pie(sizes, explode=explode, labels=labels, colors=colors,
+        autopct='%1.1f%%', shadow=True, startangle=90)
+
+# 设置标题
+plt.title('Pie Chart', fontsize=16)
+'''
+        self.custom_code_text.delete(1.0, tk.END)
+        self.custom_code_text.insert(1.0, template)
+    
+    def load_3d_template(self):
+        """加载3D图模板"""
+        template = '''import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+
+# 生成数据
+x = np.linspace(-5, 5, 100)
+y = np.linspace(-5, 5, 100)
+X, Y = np.meshgrid(x, y)
+Z = np.sin(np.sqrt(X**2 + Y**2))
+
+# 绘制3D图
+fig = plt.figure(figsize=(10, 6))
+ax = fig.add_subplot(111, projection='3d')
+surf = ax.plot_surface(X, Y, Z, cmap='viridis', edgecolor='none')
+
+# 设置标题和标签
+ax.set_title('3D Surface Plot', fontsize=16)
+ax.set_xlabel('X轴')
+ax.set_ylabel('Y轴')
+ax.set_zlabel('Z轴')
+fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
+'''
+        self.custom_code_text.delete(1.0, tk.END)
+        self.custom_code_text.insert(1.0, template)
     
     # 初始化图表类型映射
     def _init_chart_mapping(self):
@@ -271,18 +552,22 @@ class DrawTool:
                 y_str = frame['y_data'].get(1.0, tk.END)
                 err_str = frame['err_data'].get(1.0, tk.END)
                 color = frame['color'].get().strip() or 'blue'  # 获取颜色设置
+                # 获取自定义标签
+                custom_labels_str = frame['custom_labels'].get(1.0, tk.END) if 'custom_labels' in frame else ''
                 
                 if not y_str or y_str.strip() == '':
                     raise ValueError(f"请输入数据集 {i+1} 的Y轴数据")
                 
                 y_data = self._parse_data(y_str, float)
                 error = self._parse_data(err_str, float) if err_str and err_str.strip() != '' else None
+                custom_labels = self._parse_data(custom_labels_str, str) if custom_labels_str and custom_labels_str.strip() != '' else None
                 
                 datasets.append({
                     'label': label,
                     'y_data': y_data,
                     'error': error,
-                    'color': color
+                    'color': color,
+                    'custom_labels': custom_labels
                 })
 
             # 3. 处理X轴数据
@@ -312,6 +597,12 @@ class DrawTool:
             show_grid = self.var_grid.get()
             show_legend = self.var_legend.get()
             show_values = self.var_show_values.get()
+            show_custom_labels = self.var_show_custom_labels.get()
+
+            # 检查自定义标签功能是否支持当前图表类型
+            if show_custom_labels and chart_type not in ["柱状图", "误差棒图", "直方图"]:
+                messagebox.showwarning("提示", "自定义标签功能仅支持柱状图、误差棒图和直方图")
+                show_custom_labels = False
 
             # 5. 创建画布
             plt.figure(figsize=(10, 6))
@@ -321,6 +612,8 @@ class DrawTool:
                 if chart_type == "雷达图":
                     show_radar_shadow = 0.25 if self.var_radar_shadow.get() else 0
                     self.chart_mapping[chart_type](x_data, datasets, show_values, show_radar_shadow)
+                elif chart_type in ["柱状图", "误差棒图", "直方图"]:
+                    self.chart_mapping[chart_type](x_data, datasets, show_values, show_custom_labels)
                 else:
                     self.chart_mapping[chart_type](x_data, datasets, show_values)
             else:
@@ -363,7 +656,7 @@ class DrawTool:
                     plt.text(x, y + offset + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
     
     # 柱状图绘制（支持分组柱状图和误差棒）
-    def _plot_bar(self, x_data, datasets, show_values=False):
+    def _plot_bar(self, x_data, datasets, show_values=False, show_custom_labels=False):
         import numpy as np
         n = len(x_data)
         
@@ -385,6 +678,20 @@ class DrawTool:
                     val = dataset['y_data'][0]
                     plt.text(x_pos[i], val + (dataset['error'][0] if dataset['error'] else 0) + 0.02,
                             f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                
+                # 显示自定义标签
+                if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                    labels = dataset['custom_labels']
+                    if labels:
+                        label = labels[0] if isinstance(labels, list) else labels
+                        val = dataset['y_data'][0]
+                        plt.text(x_pos[i], val + (dataset['error'][0] if dataset['error'] else 0) + 0.05,
+                                str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
+            
+            # 调整y轴范围，确保自定义标签完整显示
+            if show_custom_labels:
+                y_min, y_max = plt.ylim()
+                plt.ylim(y_min, y_max * 1.15)
         else:
             # 检查是否所有数据集的Y轴数据长度相同
             if all(len(dataset['y_data']) == len(datasets[0]['y_data']) for dataset in datasets):
@@ -408,8 +715,22 @@ class DrawTool:
                             for bar, val in zip(bars, dataset['y_data']):
                                 plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][dataset['y_data'].index(val)] if dataset['error'] and dataset['y_data'].index(val) < len(dataset['error']) else 0) + 0.02,
                                         f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                        
+                        # 显示自定义标签
+                        if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                            labels = dataset['custom_labels']
+                            for bar, val, idx in zip(bars, dataset['y_data'], range(len(dataset['y_data']))):
+                                if idx < len(labels):
+                                    label = labels[idx]
+                                    plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][idx] if dataset['error'] and idx < len(dataset['error']) else 0) + 0.05,
+                                            str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
                     
                     plt.xticks(x_pos, x_data)
+                    
+                    # 调整y轴范围，确保自定义标签完整显示
+                    if show_custom_labels:
+                        y_min, y_max = plt.ylim()
+                        plt.ylim(y_min, y_max * 1.15)
                 else:
                     # 新模式：每个X轴标签对应一组数据集
                     num_datasets = len(datasets)
@@ -432,9 +753,23 @@ class DrawTool:
                                 for bar, val in zip(bars, dataset['y_data']):
                                     plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][dataset['y_data'].index(val)] if dataset['error'] and dataset['y_data'].index(val) < len(dataset['error']) else 0) + 0.02,
                                             f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                            
+                            # 显示自定义标签
+                            if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                                labels = dataset['custom_labels']
+                                for bar, val, idx in zip(bars, dataset['y_data'], range(len(dataset['y_data']))):
+                                    if idx < len(labels):
+                                        label = labels[idx]
+                                        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][idx] if dataset['error'] and idx < len(dataset['error']) else 0) + 0.05,
+                                                str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
                     
                     # 设置X轴标签
                     plt.xticks(np.arange(len(x_data)) * (num_datasets * width + 0.2) + (num_datasets * width) / 2, x_data)
+                    
+                    # 调整y轴范围，确保自定义标签完整显示
+                    if show_custom_labels:
+                        y_min, y_max = plt.ylim()
+                        plt.ylim(y_min, y_max * 1.15)
             else:
                 # 传统分组柱状图
                 width = 0.8 / len(datasets)
@@ -454,8 +789,22 @@ class DrawTool:
                         for bar, val in zip(bars, dataset['y_data']):
                             plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][dataset['y_data'].index(val)] if dataset['error'] and dataset['y_data'].index(val) < len(dataset['error']) else 0) + 0.02,
                                     f'{val:.2f}', ha='center', va='bottom', fontsize=8)
+                    
+                    # 显示自定义标签
+                    if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                        labels = dataset['custom_labels']
+                        for bar, val, idx in zip(bars, dataset['y_data'], range(len(dataset['y_data']))):
+                            if idx < len(labels):
+                                label = labels[idx]
+                                plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + (dataset['error'][idx] if dataset['error'] and idx < len(dataset['error']) else 0) + 0.05,
+                                        str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
                 
                 plt.xticks(x_pos, x_data)
+                
+                # 调整y轴范围，确保自定义标签完整显示
+                if show_custom_labels:
+                    y_min, y_max = plt.ylim()
+                    plt.ylim(y_min, y_max * 1.15)
     
     # 散点图绘制（支持多个数据集）
     def _plot_scatter(self, x_data, datasets, show_values=False):
@@ -470,7 +819,7 @@ class DrawTool:
                     plt.text(x, y + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
     
     # 误差棒图绘制（支持多个数据集）
-    def _plot_errorbar(self, x_data, datasets, show_values=False):
+    def _plot_errorbar(self, x_data, datasets, show_values=False, show_custom_labels=False):
         markers = ['o', 's', '^', 'v', 'D']
         
         # 检查是否是使用数据集标签作为X轴的情况
@@ -489,8 +838,21 @@ class DrawTool:
                 if show_values:
                     y = dataset['y_data'][0]
                     plt.text(x_pos[i], y + dataset['error'][0] + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
+                
+                # 显示自定义标签
+                if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                    labels = dataset['custom_labels']
+                    if labels:
+                        label = labels[0] if isinstance(labels, list) else labels
+                        y = dataset['y_data'][0]
+                        plt.text(x_pos[i], y + dataset['error'][0] + 0.08, str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
             
             plt.xticks(x_pos, x_data)
+            
+            # 调整y轴范围，确保自定义标签完整显示
+            if show_custom_labels:
+                y_min, y_max = plt.ylim()
+                plt.ylim(y_min, y_max * 1.15)
         else:
             # 传统误差棒图
             for i, dataset in enumerate(datasets):
@@ -504,9 +866,22 @@ class DrawTool:
                 if show_values:
                     for j, (x, y) in enumerate(zip(x_data, dataset['y_data'])):
                         plt.text(x, y + dataset['error'][j] + 0.05, f'{y:.2f}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
-    
+                
+                # 显示自定义标签
+                if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                    labels = dataset['custom_labels']
+                    for j, (x, y) in enumerate(zip(x_data, dataset['y_data'])):
+                        if j < len(labels):
+                            label = labels[j]
+                            plt.text(x, y + dataset['error'][j] + 0.08, str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
+            
+            # 调整y轴范围，确保自定义标签完整显示
+            if show_custom_labels:
+                y_min, y_max = plt.ylim()
+                plt.ylim(y_min, y_max * 1.15)
+
     # 直方图绘制
-    def _plot_hist(self, x_data, datasets, show_values=False):
+    def _plot_hist(self, x_data, datasets, show_values=False, show_custom_labels=False):
         for i, dataset in enumerate(datasets):
             counts, bins, patches = plt.hist(dataset['y_data'], bins=8, alpha=0.6, color=dataset['color'], 
                     label=dataset['label'])
@@ -517,6 +892,20 @@ class DrawTool:
                     if count > 0:
                         plt.text(patch.get_x() + patch.get_width()/2, patch.get_height() + 0.1, 
                                 f'{int(count)}', ha='center', va='bottom', fontsize=8, color=dataset['color'])
+            
+            # 显示自定义标签
+            if show_custom_labels and 'custom_labels' in dataset and dataset['custom_labels']:
+                labels = dataset['custom_labels']
+                for idx, (count, patch) in enumerate(zip(counts, patches)):
+                    if count > 0 and idx < len(labels):
+                        label = labels[idx]
+                        plt.text(patch.get_x() + patch.get_width()/2, patch.get_height() + 0.15, 
+                                str(label), ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        # 调整y轴范围，确保自定义标签完整显示
+        if show_custom_labels:
+            y_min, y_max = plt.ylim()
+            plt.ylim(y_min, y_max * 1.15)
     
     # 饼图绘制
     def _plot_pie(self, x_data, datasets, show_values=False):

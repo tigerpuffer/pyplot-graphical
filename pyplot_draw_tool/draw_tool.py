@@ -1,20 +1,46 @@
 # 全能Matplotlib图形化绘图工具 —— 支持所有图表类型，零代码操作
 # 作者：红鳍东方鲀
-# 版本：2.2.0
+# 版本：3.0.0
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import json
+import os
+import sys
+
+# 打包环境兼容设置
+def setup_matplotlib():
+    """配置matplotlib以支持打包环境"""
+    # 强制使用TkAgg后端
+    matplotlib.use('TkAgg')
+    
+    # 获取当前脚本路径
+    if hasattr(sys, '_MEIPASS'):
+        # 打包环境
+        base_path = sys._MEIPASS
+        # 设置matplotlib数据路径
+        mpl_data_path = os.path.join(base_path, 'mpl-data')
+        if os.path.exists(mpl_data_path):
+            matplotlib.rcParams['datapath'] = mpl_data_path
+    else:
+        # 开发环境
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    # 设置字体
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+
+# 初始化matplotlib
+setup_matplotlib()
+
 from matplotlib.patches import Circle, RegularPolygon
 from matplotlib.path import Path
 from matplotlib.spines import Spine
 from matplotlib.transforms import Affine2D
 from matplotlib.projections.polar import PolarAxes
 from matplotlib.projections import register_projection
-
-plt.rcParams['font.sans-serif'] = ['SimHei']
-plt.rcParams['axes.unicode_minus'] = False
 
 def radar_factory(num_vars, frame='polygon'):
     theta = np.linspace(0, 2*np.pi, num_vars, endpoint=False)
@@ -85,6 +111,9 @@ class DrawTool:
         # 初始化图表类型映射
         self._init_chart_mapping()
         
+        # 创建菜单栏
+        self._create_menu_bar()
+        
         # 创建Notebook控件（多页面支持）
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
@@ -102,6 +131,14 @@ class DrawTool:
         
         # 初始化自定义代码页面
         self._init_custom_code_gui()
+        
+        # 检查是否首次运行，显示欢迎向导
+        self._check_first_run()
+    
+    def _check_first_run(self):
+        """检查首次运行，显示欢迎向导"""
+        from settings_dialog import show_first_run_wizard
+        self.root.after(500, lambda: show_first_run_wizard(self.root))
     
     def _create_dataset_inputs(self):
         """创建数据集输入字段"""
@@ -164,6 +201,210 @@ class DrawTool:
         """处理数据集数量变化事件"""
         self._create_dataset_inputs()
     
+    def _create_menu_bar(self):
+        """创建菜单栏"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # 文件菜单
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="文件", menu=file_menu)
+        file_menu.add_command(label="导入配置", command=self.import_config)
+        file_menu.add_command(label="导出配置", command=self.export_config)
+        file_menu.add_separator()
+        file_menu.add_command(label="退出", command=self.root.quit)
+        
+        # 工具菜单
+        tool_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="工具", menu=tool_menu)
+        tool_menu.add_command(label="设置", command=self._show_settings)
+        tool_menu.add_command(label="AI助手", command=self._show_ai_assistant)
+        tool_menu.add_separator()
+        tool_menu.add_command(label="关于", command=self._show_about)
+    
+    def _show_settings(self):
+        """显示设置对话框"""
+        from settings_dialog import show_settings
+        show_settings(self.root)
+    
+    def _show_ai_assistant(self):
+        """显示AI助手对话框"""
+        from config_manager import get_config_manager
+        config = get_config_manager()
+        if not config.is_ai_configured():
+            messagebox.showinfo("提示", 
+                              "请先在「工具→设置」中配置AI API密钥\n"
+                              "配置完成后即可使用AI助手功能。")
+            self._show_settings()
+            return
+
+        ai_win = tk.Toplevel(self.root)
+        ai_win.title("AI智能绘图助手")
+        ai_win.geometry("800x700")
+        ai_win.transient(self.root)
+        # 不使用 grab_set()，使对话框非模态，允许用户同时操作主界面
+
+        tk.Label(ai_win, text="🤖 AI智能绘图助手", font=("微软雅黑", 16, "bold")).pack(pady=15)
+
+        excel_frame = tk.LabelFrame(ai_win, text="Excel数据（可选）", font=("微软雅黑", 11))
+        excel_frame.pack(fill="x", padx=20, pady=10)
+
+        excel_path_var = tk.StringVar()
+        tk.Entry(excel_frame, textvariable=excel_path_var, width=60).pack(side="left", padx=10, pady=10)
+        tk.Button(excel_frame, text="选择Excel文件", 
+                 command=lambda: self._select_excel_for_ai(excel_path_var)).pack(side="left", pady=10)
+
+        request_frame = tk.LabelFrame(ai_win, text="请描述您想要的图表", font=("微软雅黑", 11), height=180)
+        request_frame.pack(fill="x", padx=20, pady=10)
+        request_frame.pack_propagate(False)
+
+        request_text = tk.Text(request_frame, width=70, height=8, font=("微软雅黑", 10))
+        request_text.pack(padx=10, pady=10)
+        request_text.insert("1.0", "例如：读取Excel文件中的销售数据，绘制一个展示各季度销售额的柱状图，添加网格和图例")
+
+        result_frame = tk.LabelFrame(ai_win, text="生成结果", font=("微软雅黑", 11), height=220)
+        result_frame.pack(fill="x", padx=20, pady=10)
+        result_frame.pack_propagate(False)
+
+        result_text = tk.Text(result_frame, width=70, height=10, font=("Consolas", 9))
+        result_text.pack(padx=10, pady=10)
+
+        btn_frame = tk.Frame(ai_win)
+        btn_frame.pack(fill="x", padx=20, pady=10)
+
+        tk.Button(btn_frame, text="生成图表参数（不太好用）", width=20,
+                 command=lambda: self._generate_chart_params(
+                     ai_win, excel_path_var.get(), request_text, result_text)).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="生成完整代码（谨慎使用）", width=20,
+                 command=lambda: self._generate_code(
+                     ai_win, excel_path_var.get(), request_text, result_text)).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="导入到自定义代码", width=15,
+                 command=lambda: self._import_code_to_custom(result_text)).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="应用到当前图表（基本没用）", width=23,
+                 command=lambda: self._apply_to_current_chart(
+                     ai_win, excel_path_var.get(), request_text, result_text)).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="关闭", width=10,
+                 command=ai_win.destroy).pack(side="right", padx=5)
+
+    def _select_excel_for_ai(self, path_var):
+        """选择Excel文件"""
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="选择Excel文件",
+            filetypes=[("Excel文件", "*.xlsx *.xls"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            path_var.set(file_path)
+
+    def _generate_chart_params(self, parent_win, excel_path, request_text, result_text):
+        """生成图表参数"""
+        from ai_assistant import get_ai_assistant
+        import threading
+
+        request = request_text.get("1.0", "end-1c").strip()
+        if not request:
+            messagebox.showwarning("提示", "请输入图表需求描述")
+            return
+
+        result_text.delete("1.0", "end")
+        result_text.insert("1.0", "正在连接AI并生成图表参数，请稍候...")
+
+        def process():
+            try:
+                ai = get_ai_assistant()
+                excel_data = None
+                if excel_path:
+                    excel_data = ai.read_excel(excel_path)
+                    if not excel_data.get("success"):
+                        result_text.delete("1.0", "end")
+                        result_text.insert("1.0", f"读取Excel失败: {excel_data.get('error')}")
+                        return
+
+                result = ai.generate_chart_params(request, excel_data)
+                result_text.delete("1.0", "end")
+                if result.get("success"):
+                    result_text.insert("1.0", json.dumps(result, ensure_ascii=False, indent=2))
+                else:
+                    result_text.insert("1.0", f"生成失败: {result.get('error')}\n\n原始响应:\n{result.get('raw_response', 'N/A')}")
+            except Exception as e:
+                result_text.delete("1.0", "end")
+                result_text.insert("1.0", f"发生错误: {str(e)}")
+
+        threading.Thread(target=process, daemon=True).start()
+
+    def _generate_code(self, parent_win, excel_path, request_text, result_text):
+        """生成完整代码"""
+        from ai_assistant import get_ai_assistant
+        import threading
+
+        request = request_text.get("1.0", "end-1c").strip()
+        if not request:
+            messagebox.showwarning("提示", "请输入图表需求描述")
+            return
+
+        result_text.delete("1.0", "end")
+        result_text.insert("1.0", "正在连接AI并生成代码，请稍候...")
+
+        def process():
+            try:
+                ai = get_ai_assistant()
+                excel_data = None
+                if excel_path:
+                    excel_data = ai.read_excel(excel_path)
+                    if not excel_data.get("success"):
+                        result_text.delete("1.0", "end")
+                        result_text.insert("1.0", f"读取Excel失败: {excel_data.get('error')}")
+                        return
+
+                result = ai.generate_chart_params(request, excel_data)
+                code_result = ai.generate_matplotlib_code(request, excel_data, result if result.get("success") else None)
+                result_text.delete("1.0", "end")
+                if code_result.get("success"):
+                    result_text.insert("1.0", code_result.get("code"))
+                else:
+                    result_text.insert("1.0", f"代码生成失败: {code_result.get('error')}")
+            except Exception as e:
+                result_text.delete("1.0", "end")
+                result_text.insert("1.0", f"发生错误: {str(e)}")
+
+        threading.Thread(target=process, daemon=True).start()
+
+    def _import_code_to_custom(self, result_text):
+        """将生成的代码导入到自定义代码输入框"""
+        code = result_text.get("1.0", "end-1c").strip()
+        if not code or code.startswith("正在连接") or code.startswith("生成失败") or code.startswith("发生错误"):
+            messagebox.showwarning("提示", "没有可导入的代码\n请先生成有效的代码")
+            return
+        
+        # 切换到自定义代码标签页
+        self.notebook.select(1)  # 自定义代码在第 2 个标签页（索引从 0 开始）
+        
+        # 清空并填入代码
+        self.custom_code_text.delete("1.0", "end")
+        self.custom_code_text.insert("1.0", code)
+        
+        messagebox.showinfo("成功", "代码已成功导入到自定义代码输入框！\n您可以直接运行或修改代码")
+
+    def _apply_to_current_chart(self, parent_win, excel_path, request_text, result_text):
+        """应用生成的参数到当前图表"""
+        messagebox.showinfo("提示", "此功能将在下一步实现，当前可使用「生成完整代码」后复制到自定义代码页面运行")
+    
+    def _show_about(self):
+        """显示关于对话框"""
+        about_win = tk.Toplevel(self.root)
+        about_win.title("关于")
+        about_win.geometry("400x300")
+        about_win.resizable(False, False)
+        about_win.transient(self.root)
+        
+        tk.Label(about_win, text="Python绘图工具", font=("微软雅黑", 16, "bold")).pack(pady=20)
+        tk.Label(about_win, text="版本：3.0.0").pack()
+        tk.Label(about_win, text="作者：红鳍东方鲀").pack(pady=10)
+        tk.Label(about_win, text="基于Matplotlib的图形化绘图工具\n支持多种图表类型，零代码操作").pack(pady=10)
+        tk.Label(about_win, text="许可证：GPL-3.0", fg="gray").pack(pady=20)
+        tk.Button(about_win, text="确定", width=10, 
+                 command=about_win.destroy).pack(pady=10)
+    
     def _init_basic_gui(self):
         # 标题
         tk.Label(self.frame_basic, text="python绘图工具", font=("微软雅黑", 18, "bold")).pack(pady=15)
@@ -189,7 +430,7 @@ class DrawTool:
         self._create_dataset_inputs()
         
         # ========== 第二部分：图表设置区 ==========
-        frame_setting = tk.LabelFrame(self.root, text="图表设置", font=("微软雅黑", 12))
+        frame_setting = tk.LabelFrame(self.frame_basic, text="图表设置", font=("微软雅黑", 12))
         frame_setting.pack(fill="x", padx=20, pady=5)
         
         # 图表类型
@@ -266,7 +507,7 @@ class DrawTool:
         
         # 作者信息
         tk.Label(self.frame_basic, text="作者：红鳍东方鲀", font=('微软雅黑', 9), fg="gray").pack(pady=5)
-        tk.Label(self.frame_basic, text="版本：v2.2.0", font=('微软雅黑', 9), fg="gray").pack(pady=5)
+        tk.Label(self.frame_basic, text="版本：v3.0.0", font=('微软雅黑', 9), fg="gray").pack(pady=5)
     
     def _init_custom_code_gui(self):
         """初始化自定义代码页面"""
@@ -330,6 +571,10 @@ plt.grid(True)
         btn_load = ttk.Button(frame_buttons, text="📂 加载代码", width=18, command=self.load_custom_code)
         btn_load.grid(row=0, column=3, padx=15)
         
+        # 导出代码按钮
+        btn_export = ttk.Button(frame_buttons, text="📤 导出代码", width=18, command=self.export_custom_code)
+        btn_export.grid(row=0, column=4, padx=15)
+        
         # 预置模板按钮
         frame_templates = tk.LabelFrame(self.frame_custom, text="预置模板", font=("微软雅黑", 10))
         frame_templates.pack(fill="x", padx=20, pady=5)
@@ -362,10 +607,14 @@ plt.grid(True)
             
             # 显示图形
             plt.tight_layout()
-            plt.show()
+            plt.show(block=True)  # 添加block=True确保图表窗口正确显示
             
         except SyntaxError as e:
             messagebox.showerror("语法错误", f"代码语法错误：\n{str(e)}")
+        except ImportError as e:
+            messagebox.showerror("导入错误", f"缺少必要的模块：\n{str(e)}\n\n请确保代码中使用的模块已正确安装")
+        except RuntimeError as e:
+            messagebox.showerror("运行时错误", f"代码执行时发生错误：\n{str(e)}\n\n可能是图形后端问题，尝试重新启动程序")
         except Exception as e:
             messagebox.showerror("执行错误", f"代码执行错误：\n{str(e)}")
     
@@ -388,6 +637,35 @@ plt.grid(True)
                 messagebox.showinfo("成功", "代码加载成功！")
             except Exception as e:
                 messagebox.showerror("错误", f"加载文件失败：\n{str(e)}")
+    
+    def export_custom_code(self):
+        """导出自定义代码到文件"""
+        from tkinter import filedialog
+        code = self.custom_code_text.get(1.0, tk.END)
+        if not code.strip():
+            messagebox.showwarning("警告", "没有可导出的代码！")
+            return
+        
+        # 获取桌面路径作为默认保存位置
+        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+        
+        file_path = filedialog.asksaveasfilename(
+            title="导出代码文件",
+            defaultextension=".py",
+            filetypes=[("Python文件", "*.py"), ("所有文件", "*.*")],
+            initialdir=desktop_path,  # 设置默认保存目录为桌面
+            initialfile="plot_code.py"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(code)
+                messagebox.showinfo("成功", f"代码导出成功！\n保存位置：{file_path}")
+            except PermissionError:
+                messagebox.showerror("权限错误", "无法保存文件，请选择其他保存位置（如桌面）")
+            except Exception as e:
+                messagebox.showerror("错误", f"导出文件失败：\n{str(e)}")
     
     def load_line_template(self):
         """加载折线图模板"""
@@ -914,7 +1192,7 @@ fig.colorbar(surf, ax=ax, shrink=0.5, aspect=5)
         fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='radar'))
         fig.subplots_adjust(top=0.85)
         
-        # 设置径向轴范围
+       # 获取真实数据最大最小值
         max_value = max(max(dataset['y_data']) for dataset in datasets) if datasets else 1
         # 计算合适的最大值，向上取整到最近的整数
         max_limit = int(max_value * 1.2) + 1
